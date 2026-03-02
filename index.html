@@ -97,19 +97,48 @@
                 });
         }
     }
+let isProcessing = false; // Kunci pengaman
 
-    function startScanner() {
-        const sc = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        sc.render((txt) => {
-            fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'scanAttendance', nisn: txt, guru: user.Nama }) })
-            .then(r => r.json()).then(res => {
-                const icon = res.status === 'success' ? 'success' : (res.status === 'warning' ? 'info' : 'error');
-                Swal.fire(res.status.toUpperCase(), res.message, icon);
-                if(res.status === 'success') loadRekap();
-            });
+function startScanner() {
+    const sc = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+    
+    sc.render((txt) => {
+        // Jika sedang memproses, abaikan scan baru
+        if (isProcessing) return;
+        
+        isProcessing = true; // Kunci
+        
+        Swal.fire({
+            title: 'Mencatat...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
         });
-    }
 
+        fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ action: 'scanAttendance', nisn: txt, guru: user.Nama }) 
+        })
+        .then(r => r.json())
+        .then(res => {
+            const icon = res.status === 'success' ? 'success' : (res.status === 'warning' ? 'info' : 'error');
+            
+            Swal.fire({
+                title: res.status.toUpperCase(),
+                text: res.message,
+                icon: icon,
+                timer: 3000 // Beri jeda 3 detik sebelum bisa scan lagi
+            }).then(() => {
+                isProcessing = false; // Buka kunci setelah alert ditutup
+            });
+
+            if(res.status === 'success') loadRekap();
+        })
+        .catch(err => {
+            console.error(err);
+            isProcessing = false; // Buka kunci jika error jaringan
+        });
+    });
+}
     function loadRekap() {
         fetch(`${API_URL}?action=getRecap&email=${user.Email}&role=${user.Role}`)
             .then(r => r.json()).then(data => {
@@ -146,3 +175,4 @@
 </body>
 
 </html>
+
